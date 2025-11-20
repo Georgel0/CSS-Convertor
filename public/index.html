@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,120 +9,111 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Fira+Code&display=swap" rel="stylesheet">
-    
-    <!-- Firebase SDK - Initializing Auth and Firestore for History Feature -->
+
+    <!-- Firebase SDK - Now loading configuration and authenticating securely via Canvas globals -->
     <script type="module">
-        // Using the stable 11.x.x version for necessary modules
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, query, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyABQVHI-wKpCrMNJVw5kwJXtIQzFzdnd8I",
-            authDomain: "css-convertor.firebaseapp.com",
-            projectId: "css-convertor",
-            storageBucket: "css-convertor.firebasestorage.app",
-            messagingSenderId: "961266176630",
-            appId: "1:961266176630:web:e96de7d86348559deb8557",
-            measurementId: "G-9LMDRJEL59"
-        };
-        
-        // Initialize Firebase
+        // SECURE IMPLEMENTATION: Load config from environment variable
+        // This prevents the API key from being hardcoded in GitHub
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : null;
+
+        let userId = null;
+        window.db = null;
+        window.auth = null;
+        window.firebase = null;
+
         try {
-            const app = initializeApp(firebaseConfig);
-            // Get necessary services
-            window.db = getFirestore(app);
-            window.auth = getAuth(app);
-            
-            // Expose modules globally for use in the main script
-            window.firebase = {
-                collection,
-                addDoc,
-                query,
-                orderBy,
-                limit,
-                onSnapshot,
-                signInAnonymously,
-                onAuthStateChanged
-            };
-            console.log("Firebase Initialized for History.");
-        } catch (e) {
-            console.error("Firebase Initialization Error. History will be disabled.", e);
+            if (firebaseConfig) {
+                const app = initializeApp(firebaseConfig);
+                window.db = getFirestore(app);
+                window.auth = getAuth(app);
+                
+                // Expose modules globally
+                window.firebase = { 
+                    collection, addDoc, query, orderBy, limit, onSnapshot, 
+                    signInAnonymously, signInWithCustomToken, onAuthStateChanged 
+                };
+                
+                // 1. Authenticate using the provided secure token, or anonymously if missing
+                const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                if (authToken) {
+                    signInWithCustomToken(window.auth, authToken)
+                        .then(() => console.log("Signed in securely with custom token."))
+                        .catch(e => {
+                            console.error("Custom token sign-in failed, trying anonymous.", e);
+                            signInAnonymously(window.auth); // Fallback
+                        });
+                } else {
+                    signInAnonymously(window.auth)
+                         .then(() => console.log("Signed in anonymously."))
+                         .catch(e => console.error("Anonymous sign-in failed.", e));
+                }
+
+            } else {
+                console.error("Firebase config not found. History disabled.");
+            }
+        } catch(e) { 
+            console.error("Critical Firebase Error. History disabled.", e); 
+        }
+
+        // Set up the state change listener after initialization
+        if (window.auth) {
+            window.firebase.onAuthStateChanged(window.auth, (user) => {
+                if (user) {
+                    userId = user.uid;
+                    window.globalUserId = userId; // Store userId globally
+                    // Only start loading history once authenticated
+                    if (window.loadHistory) window.loadHistory(); 
+                } else {
+                    // Handle sign out if ever implemented
+                }
+            });
         }
     </script>
-    
+
     <style>
-        body {
-            background: #0f172a;
-            font-family: 'Inter', sans-serif;
-            color: white;
-        }
-        
-        .code-font {
-            font-family: 'Fira Code', monospace;
-        }
-        
-        ::-webkit-scrollbar {
-            width: 8px;
-            background: #1e293b;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #475569;
-            border-radius: 4px;
-        }
-        
-        .loader {
-            border: 3px solid #334155;
-            border-top: 3px solid #3b82f6;
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-            
-            100% {
-                transform: rotate(360deg);
-            }
-        }
+        body { background: #0f172a; font-family: 'Inter', sans-serif; color: white; }
+        .code-font { font-family: 'Fira Code', monospace; }
+        ::-webkit-scrollbar { width: 8px; background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .loader { border: 3px solid #334155; border-top: 3px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-
 <body class="h-screen flex flex-col lg:flex-row overflow-hidden">
-    
+
     <!-- Sidebar History -->
     <aside class="w-full lg:w-72 bg-slate-900 border-r border-slate-800 flex flex-col h-[30vh] lg:h-auto">
         <div class="p-4 border-b border-slate-800 font-bold flex items-center gap-2">
             <i class="fas fa-history text-blue-500"></i> Conversion History
         </div>
         <div id="history-list" class="overflow-y-auto flex-1 p-2 space-y-2">
-            <p class="text-xs text-slate-500 text-center mt-4">Authenticating user...</p>
+            <p class="text-xs text-slate-500 text-center mt-4" id="history-status">Connecting securely...</p>
         </div>
     </aside>
-    
+
     <!-- Main Content -->
     <main class="flex-1 flex flex-col p-4 lg:p-6 gap-4 h-[70vh] lg:h-auto relative">
         <header class="flex justify-between items-center">
             <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">CSS to Tailwind AI Converter</h1>
             <button id="convert-btn" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium shadow-lg transition flex items-center gap-2">
-                <span>Convert</span>
-                <div id="loader" class="loader hidden"></div>
+                <span>Convert</span> <div id="loader" class="loader hidden"></div>
             </button>
         </header>
-        
+
         <div class="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
             <!-- Input -->
             <div class="flex-1 flex flex-col">
                 <label class="text-xs text-slate-400 mb-2">CSS Input</label>
                 <textarea id="css-input" class="flex-1 bg-slate-800 rounded-lg border border-slate-700 p-4 code-font text-sm resize-none focus:ring-2 focus:ring-blue-500 outline-none" placeholder=".box { color: red; }"></textarea>
             </div>
-            
+
             <!-- Output -->
             <div class="flex-1 flex flex-col min-h-0">
                 <label class="text-xs text-slate-400 mb-2 flex justify-between">
@@ -137,7 +127,7 @@
             </div>
         </div>
     </main>
-    
+
     <script>
         // Logic
         const els = {
@@ -146,44 +136,23 @@
             btn: document.getElementById('convert-btn'),
             loader: document.getElementById('loader'),
             history: document.getElementById('history-list'),
+            status: document.getElementById('history-status'),
             analysis: document.getElementById('analysis-text')
         };
         
-        let userId = null;
-        let isAuthReady = false;
-        
-        // 1. Auth & History Setup
-        window.onload = () => {
-            if (!window.firebase || !window.auth) {
-                els.history.innerHTML = '<p class="text-xs text-red-500 text-center mt-4">Firebase failed to initialize.</p>';
-                isAuthReady = true;
+        // This function is called once authentication is complete (from the module script)
+        window.loadHistory = function() {
+            const userId = window.globalUserId;
+
+            if (!userId || !window.db) {
+                els.status.textContent = 'History disabled: Failed to connect to database.';
                 return;
             }
             
-            // Listen for authentication state changes
-            window.firebase.onAuthStateChanged(window.auth, (user) => {
-                isAuthReady = true;
-                if (user) {
-                    userId = user.uid;
-                    loadHistory();
-                } else {
-                    // Sign in anonymously if no user is found
-                    window.firebase.signInAnonymously(window.auth).catch(e => {
-                        els.history.innerHTML = `<p class="text-xs text-red-500 text-center mt-4">Auth Error: ${e.message}</p>`;
-                    });
-                }
-            });
-        };
-        
-        function loadHistory() {
-            // Guard clause to ensure we have a user and database instance
-            if (!isAuthReady || !userId || !window.db) {
-                els.history.innerHTML = '<p class="text-xs text-red-500 text-center mt-4">Cannot load history: Auth not ready.</p>';
-                return;
-            }
+            // Clear status and start loading
+            els.history.innerHTML = '';
             
             // Firestore Query: Get the last 10 conversions for this user
-            // We are using the private data path: /users/{userId}/conversions
             const q = window.firebase.query(
                 window.firebase.collection(window.db, `users/${userId}/conversions`),
                 window.firebase.orderBy('timestamp', 'desc'),
@@ -194,7 +163,7 @@
             window.firebase.onSnapshot(q, (snap) => {
                 els.history.innerHTML = '';
                 
-                if (snap.empty) {
+                if(snap.empty) {
                     els.history.innerHTML = '<p class="text-xs text-slate-600 text-center">No conversion history yet.</p>';
                 }
                 
@@ -202,10 +171,8 @@
                     const data = doc.data();
                     const div = document.createElement('div');
                     div.className = 'bg-slate-800 p-3 rounded cursor-pointer hover:bg-slate-700 transition border-l-2 border-transparent hover:border-blue-500';
-                    // Display the input CSS code
                     div.innerHTML = `<p class="text-xs code-font truncate opacity-80">${data.css}</p>`;
                     
-                    // Clicking a history item populates the input/output fields
                     div.onclick = () => {
                         els.input.value = data.css;
                         els.output.textContent = data.tailwind;
@@ -219,39 +186,40 @@
                 els.history.innerHTML = `<p class="text-xs text-red-500 text-center mt-4">Failed to load history: ${error.message}</p>`;
             });
         }
-        
-        // 2. Conversion Logic
+
+        // Conversion Logic
         els.btn.onclick = async () => {
             const css = els.input.value.trim();
             if (!css) return;
-            
+
             setLoading(true);
             
             try {
                 // Call the Vercel serverless function
                 const res = await fetch('/api/convert', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ cssCode: css })
                 });
                 const data = await res.json();
-                
-                if (data.error) throw new Error(data.error);
-                
+
+                if(data.error) throw new Error(data.error);
+
                 els.output.textContent = data.output;
                 els.analysis.textContent = data.analysis;
                 hljs.highlightElement(els.output);
-                
-                // 3. Save to DB (Only if authenticated)
-                if (userId && window.db) {
+
+                // Save to DB (Only if authenticated and DB is available)
+                const userId = window.globalUserId;
+                if (userId && window.db && window.firebase) {
                     window.firebase.addDoc(window.firebase.collection(window.db, `users/${userId}/conversions`), {
                         css: css,
                         tailwind: data.output,
                         analysis: data.analysis,
-                        timestamp: Date.now() // Used for ordering
+                        timestamp: Date.now()
                     }).catch(e => console.error("Failed to save to Firestore:", e));
                 }
-                
+
             } catch (err) {
                 // Using a non-modal feedback approach
                 els.analysis.textContent = `Error: ${err.message}`;
@@ -260,9 +228,9 @@
                 setLoading(false);
             }
         };
-        
+
         function setLoading(state) {
-            if (state) {
+            if(state) {
                 els.loader.classList.remove('hidden');
                 els.btn.disabled = true;
             } else {
@@ -270,9 +238,8 @@
                 els.btn.disabled = false;
             }
         }
-        
+
         function copyToClipboard() {
-            // Using modern clipboard API for copy
             navigator.clipboard.writeText(els.output.textContent)
                 .then(() => {
                     els.analysis.textContent = 'Copied to clipboard!';
@@ -282,5 +249,4 @@
         }
     </script>
 </body>
-
 </html>
