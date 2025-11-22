@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 
 // This pulls the key from Vercel's environment variables
 const API_KEY = process.env.GEMINI_API_KEY;
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${API_KEY}`;
 
 const SYSTEM_PROMPT = `You are an expert CSS to Tailwind CSS converter. 
 Task: Return a JSON object with:
